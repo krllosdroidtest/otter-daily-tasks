@@ -7,6 +7,7 @@ import com.example.data.model.AlarmSoundMode
 import com.example.data.model.ExpenseCategoryEntity
 import com.example.data.model.ExpenseEntity
 import com.example.data.model.ExpensePaymentEntity
+import com.example.data.model.ExpensePaymentMethod
 import com.example.data.model.RecurrenceType
 import com.example.data.model.ShoppingFolderEntity
 import com.example.data.model.ShoppingItemEntity
@@ -57,7 +58,7 @@ object BackupManager {
     expensePayments: List<ExpensePaymentEntity> = emptyList(),
   ): Result<Int> = runCatching {
     val root = JSONObject()
-    root.put("schemaVersion", 3)
+    root.put("schemaVersion", 4)
     root.put("app", "otter")
     root.put("exportedAtMillis", System.currentTimeMillis())
 
@@ -165,6 +166,7 @@ object BackupManager {
           put("dayOfMonth", exp.dayOfMonth)
           put("dateMillis", exp.dateMillis)
           put("recurrence", exp.recurrence.name)
+          put("paymentMethod", exp.effectivePaymentMethod().name)
           put("createdAtMillis", exp.createdAtMillis)
         }
       )
@@ -329,6 +331,23 @@ object BackupManager {
       val categoryId =
         if (eJson.isNull("categoryId") || !eJson.has("categoryId")) null
         else eJson.optLong("categoryId")
+      val isInstallment = eJson.optBoolean("isInstallment", false)
+      val recurrence =
+        runCatching { RecurrenceType.valueOf(eJson.optString("recurrence")) }
+          .getOrDefault(RecurrenceType.NONE)
+      val inferredDefaultMethod =
+        when {
+          isInstallment -> ExpensePaymentMethod.CREDIT_INSTALLMENT
+          recurrence != RecurrenceType.NONE -> ExpensePaymentMethod.RECURRING
+          else -> ExpensePaymentMethod.DEBIT_ONE_TIME
+        }
+      val paymentMethod =
+        if (eJson.has("paymentMethod") && !eJson.isNull("paymentMethod")) {
+          runCatching { ExpensePaymentMethod.valueOf(eJson.optString("paymentMethod")) }
+            .getOrDefault(inferredDefaultMethod)
+        } else {
+          inferredDefaultMethod
+        }
       expenses.add(
         ExpenseEntity(
           id = eJson.optLong("id", 0L),
@@ -336,15 +355,14 @@ object BackupManager {
           notes = eJson.optString("notes", ""),
           totalAmountCents = eJson.optLong("totalAmountCents", 0L).coerceAtLeast(0L),
           categoryId = categoryId?.takeIf { it > 0L },
-          isInstallment = eJson.optBoolean("isInstallment", false),
+          isInstallment = isInstallment,
           installmentCount = eJson.optInt("installmentCount", 1).coerceAtLeast(1),
           startYear = eJson.optInt("startYear", 2026),
           startMonthZeroBased = eJson.optInt("startMonthZeroBased", 0).coerceIn(0, 11),
           dayOfMonth = eJson.optInt("dayOfMonth", 1).coerceIn(1, 31),
           dateMillis = eJson.optLong("dateMillis", System.currentTimeMillis()),
-          recurrence =
-            runCatching { RecurrenceType.valueOf(eJson.optString("recurrence")) }
-              .getOrDefault(RecurrenceType.NONE),
+          recurrence = recurrence,
+          paymentMethod = paymentMethod,
           createdAtMillis = eJson.optLong("createdAtMillis", System.currentTimeMillis()),
         )
       )

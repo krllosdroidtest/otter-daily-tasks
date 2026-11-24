@@ -1,13 +1,13 @@
 package com.example.data.model
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Fastfood
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LocalHospital
-import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -26,6 +26,13 @@ data class ExpenseCategoryEntity(
   val iconKey: String = "category",
   val createdAtMillis: Long = System.currentTimeMillis(),
 )
+
+enum class ExpensePaymentMethod {
+  DEBIT_ONE_TIME,
+  CREDIT_ONE_TIME,
+  CREDIT_INSTALLMENT,
+  RECURRING,
+}
 
 @Entity(
   tableName = "expenses",
@@ -53,10 +60,19 @@ data class ExpenseEntity(
   val dayOfMonth: Int,
   val dateMillis: Long,
   val recurrence: RecurrenceType = RecurrenceType.NONE,
+  val paymentMethod: ExpensePaymentMethod = ExpensePaymentMethod.DEBIT_ONE_TIME,
   val createdAtMillis: Long = System.currentTimeMillis(),
 ) {
   val isRecurring: Boolean
     get() = !isInstallment && recurrence != RecurrenceType.NONE
+
+  fun effectivePaymentMethod(): ExpensePaymentMethod =
+    when {
+      isInstallment -> ExpensePaymentMethod.CREDIT_INSTALLMENT
+      recurrence != RecurrenceType.NONE -> ExpensePaymentMethod.RECURRING
+      paymentMethod == ExpensePaymentMethod.CREDIT_ONE_TIME -> ExpensePaymentMethod.CREDIT_ONE_TIME
+      else -> ExpensePaymentMethod.DEBIT_ONE_TIME
+    }
 }
 
 @Entity(
@@ -106,7 +122,7 @@ object ExpenseCategoryStyleCatalog {
       CategoryIconOption("shopping", Icons.Rounded.ShoppingBag),
       CategoryIconOption("home", Icons.Rounded.Home),
       CategoryIconOption("car", Icons.Rounded.DirectionsCar),
-      CategoryIconOption("bills", Icons.Rounded.ReceiptLong),
+      CategoryIconOption("bills", Icons.AutoMirrored.Rounded.ReceiptLong),
       CategoryIconOption("card", Icons.Rounded.CreditCard),
       CategoryIconOption("health", Icons.Rounded.LocalHospital),
       CategoryIconOption("study", Icons.Rounded.School),

@@ -26,7 +26,7 @@ import com.example.data.model.TaskEntity
       ExpenseEntity::class,
       ExpensePaymentEntity::class,
     ],
-  version = 3,
+  version = 4,
   exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -137,6 +137,21 @@ abstract class AppDatabase : RoomDatabase() {
         }
       }
 
+    val MIGRATION_3_4: Migration =
+      object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+          db.execSQL(
+            "ALTER TABLE `expenses` ADD COLUMN `paymentMethod` TEXT NOT NULL DEFAULT 'DEBIT_ONE_TIME'"
+          )
+          db.execSQL(
+            "UPDATE `expenses` SET `paymentMethod` = 'CREDIT_INSTALLMENT' WHERE `isInstallment` = 1"
+          )
+          db.execSQL(
+            "UPDATE `expenses` SET `paymentMethod` = 'RECURRING' WHERE `isInstallment` = 0 AND `recurrence` != 'NONE'"
+          )
+        }
+      }
+
     fun getInstance(context: Context): AppDatabase =
       INSTANCE
         ?: synchronized(this) {
@@ -146,7 +161,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "otter_offline.db",
               )
-              .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+              .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
               .build()
               .also { INSTANCE = it }
         }

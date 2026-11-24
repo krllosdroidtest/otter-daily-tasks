@@ -71,6 +71,7 @@ import com.example.R
 import com.example.data.model.ExpenseCategoryEntity
 import com.example.data.model.ExpenseCategoryStyleCatalog
 import com.example.data.model.ExpenseEntity
+import com.example.data.model.ExpensePaymentMethod
 import com.example.data.model.RecurrenceType
 import com.example.ui.components.CreateExpenseCategoryDialog
 import com.example.util.DateTimeUtils
@@ -81,8 +82,9 @@ import java.util.Calendar
 private val QUICK_INSTALLMENTS = listOf(2, 3, 6, 10, 12)
 
 private enum class ExpenseEditorType {
-  SINGLE,
-  INSTALLMENT,
+  DEBIT_ONE_TIME,
+  CREDIT_ONE_TIME,
+  CREDIT_INSTALLMENT,
   RECURRING,
 }
 
@@ -104,7 +106,7 @@ fun ExpenseEditorScreen(
   var amountText by remember { mutableStateOf("") }
   var notes by remember { mutableStateOf("") }
   var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
-  var editorType by remember { mutableStateOf(ExpenseEditorType.SINGLE) }
+  var editorType by remember { mutableStateOf(ExpenseEditorType.DEBIT_ONE_TIME) }
 
   // Single & recurring start date
   var dateMillis by remember(initialDay) { mutableLongStateOf(initialDay.toCalendarAt(12, 0).timeInMillis) }
@@ -135,10 +137,11 @@ fun ExpenseEditorScreen(
         notes = loaded.notes
         selectedCategoryId = loaded.categoryId
         editorType =
-          when {
-            loaded.isInstallment -> ExpenseEditorType.INSTALLMENT
-            loaded.recurrence != RecurrenceType.NONE -> ExpenseEditorType.RECURRING
-            else -> ExpenseEditorType.SINGLE
+          when (loaded.effectivePaymentMethod()) {
+            ExpensePaymentMethod.CREDIT_INSTALLMENT -> ExpenseEditorType.CREDIT_INSTALLMENT
+            ExpensePaymentMethod.RECURRING -> ExpenseEditorType.RECURRING
+            ExpensePaymentMethod.CREDIT_ONE_TIME -> ExpenseEditorType.CREDIT_ONE_TIME
+            ExpensePaymentMethod.DEBIT_ONE_TIME -> ExpenseEditorType.DEBIT_ONE_TIME
           }
         recurrence =
           if (loaded.recurrence != RecurrenceType.NONE) loaded.recurrence
@@ -155,7 +158,7 @@ fun ExpenseEditorScreen(
   fun performSave() {
     val cleanTitle = title.trim()
     val amountCents = ExpenseCalculator.parseCurrencyToCents(amountText)
-    val isInstallment = editorType == ExpenseEditorType.INSTALLMENT
+    val isInstallment = editorType == ExpenseEditorType.CREDIT_INSTALLMENT
     val isRecurring = editorType == ExpenseEditorType.RECURRING
     val parsedInstallments = installmentCountText.trim().toIntOrNull()
 
@@ -169,6 +172,13 @@ fun ExpenseEditorScreen(
     val finalCount = if (isInstallment) (parsedInstallments ?: 2).coerceIn(2, 120) else 1
     val finalRecurrence = if (isRecurring) recurrence else RecurrenceType.NONE
     val chosenDay = DayKey.fromMillis(dateMillis)
+    val finalPaymentMethod =
+      when (editorType) {
+        ExpenseEditorType.DEBIT_ONE_TIME -> ExpensePaymentMethod.DEBIT_ONE_TIME
+        ExpenseEditorType.CREDIT_ONE_TIME -> ExpensePaymentMethod.CREDIT_ONE_TIME
+        ExpenseEditorType.CREDIT_INSTALLMENT -> ExpensePaymentMethod.CREDIT_INSTALLMENT
+        ExpenseEditorType.RECURRING -> ExpensePaymentMethod.RECURRING
+      }
 
     val entity =
       if (existingExpense != null) {
@@ -184,6 +194,7 @@ fun ExpenseEditorScreen(
           dayOfMonth = if (isInstallment) dayOfMonth else chosenDay.dayOfMonth,
           dateMillis = dateMillis,
           recurrence = finalRecurrence,
+          paymentMethod = finalPaymentMethod,
         )
       } else {
         ExpenseEntity(
@@ -198,6 +209,7 @@ fun ExpenseEditorScreen(
           dayOfMonth = if (isInstallment) dayOfMonth else chosenDay.dayOfMonth,
           dateMillis = dateMillis,
           recurrence = finalRecurrence,
+          paymentMethod = finalPaymentMethod,
         )
       }
     onSave(entity)
@@ -273,8 +285,9 @@ fun ExpenseEditorScreen(
             Text(
               stringResource(
                 when (editorType) {
-                  ExpenseEditorType.SINGLE -> R.string.expense_amount_label
-                  ExpenseEditorType.INSTALLMENT -> R.string.expense_amount_total_label
+                  ExpenseEditorType.DEBIT_ONE_TIME,
+                  ExpenseEditorType.CREDIT_ONE_TIME -> R.string.expense_amount_label
+                  ExpenseEditorType.CREDIT_INSTALLMENT -> R.string.expense_amount_total_label
                   ExpenseEditorType.RECURRING -> R.string.expense_amount_recurring_label
                 }
               )
@@ -310,8 +323,8 @@ fun ExpenseEditorScreen(
               verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
               FilterChip(
-                selected = editorType == ExpenseEditorType.SINGLE,
-                onClick = { editorType = ExpenseEditorType.SINGLE },
+                selected = editorType == ExpenseEditorType.DEBIT_ONE_TIME,
+                onClick = { editorType = ExpenseEditorType.DEBIT_ONE_TIME },
                 leadingIcon = {
                   Icon(
                     imageVector = Icons.Rounded.Payments,
@@ -319,12 +332,12 @@ fun ExpenseEditorScreen(
                     modifier = Modifier.size(18.dp),
                   )
                 },
-                label = { Text(stringResource(R.string.expense_type_single)) },
-                modifier = Modifier.testTag("expense_type_single"),
+                label = { Text(stringResource(R.string.expense_type_debit_one_time)) },
+                modifier = Modifier.testTag("expense_type_debit_one_time"),
               )
               FilterChip(
-                selected = editorType == ExpenseEditorType.INSTALLMENT,
-                onClick = { editorType = ExpenseEditorType.INSTALLMENT },
+                selected = editorType == ExpenseEditorType.CREDIT_ONE_TIME,
+                onClick = { editorType = ExpenseEditorType.CREDIT_ONE_TIME },
                 leadingIcon = {
                   Icon(
                     imageVector = Icons.Rounded.CreditCard,
@@ -332,8 +345,21 @@ fun ExpenseEditorScreen(
                     modifier = Modifier.size(18.dp),
                   )
                 },
-                label = { Text(stringResource(R.string.expense_type_installment)) },
-                modifier = Modifier.testTag("expense_type_installment"),
+                label = { Text(stringResource(R.string.expense_type_credit_one_time)) },
+                modifier = Modifier.testTag("expense_type_credit_one_time"),
+              )
+              FilterChip(
+                selected = editorType == ExpenseEditorType.CREDIT_INSTALLMENT,
+                onClick = { editorType = ExpenseEditorType.CREDIT_INSTALLMENT },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Rounded.CreditCard,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                  )
+                },
+                label = { Text(stringResource(R.string.expense_type_credit_installment)) },
+                modifier = Modifier.testTag("expense_type_credit_installment"),
               )
               FilterChip(
                 selected = editorType == ExpenseEditorType.RECURRING,
@@ -353,7 +379,8 @@ fun ExpenseEditorScreen(
         }
 
         when (editorType) {
-          ExpenseEditorType.SINGLE -> {
+          ExpenseEditorType.DEBIT_ONE_TIME,
+          ExpenseEditorType.CREDIT_ONE_TIME -> {
             ElevatedCard(
               shape = RoundedCornerShape(20.dp),
               colors =
@@ -438,7 +465,7 @@ fun ExpenseEditorScreen(
               }
             }
           }
-          ExpenseEditorType.INSTALLMENT -> {
+          ExpenseEditorType.CREDIT_INSTALLMENT -> {
             ElevatedCard(
               shape = RoundedCornerShape(20.dp),
               colors =

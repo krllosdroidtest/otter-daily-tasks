@@ -13,6 +13,7 @@ import com.example.backup.BackupPayload
 import com.example.backup.BackupPreview
 import com.example.data.model.ExpenseCategoryEntity
 import com.example.data.model.ExpenseEntity
+import com.example.data.model.ExpensePaymentMethod
 import com.example.data.model.RecurrenceType
 import com.example.data.model.ShoppingFolderEntity
 import com.example.data.model.ShoppingItemEntity
@@ -94,7 +95,8 @@ data class ExpensesUiState(
   val paidKeys: Set<Pair<Long, String>> = emptySet(),
   val expenseCountByDay: Map<DayKey, Int> = emptyMap(),
   val monthTotalCents: Long = 0L,
-  val monthOneTimeCents: Long = 0L,
+  val monthDebitOneTimeCents: Long = 0L,
+  val monthCreditOneTimeCents: Long = 0L,
   val monthInstallmentCents: Long = 0L,
   val monthRecurringCents: Long = 0L,
   val dayTotalCents: Long = 0L,
@@ -304,12 +306,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val monthTotal = monthOccurrences.sumOf { it.amountCents }
-        val monthOneTime =
-          monthOccurrences.filter { !it.isInstallment && !it.isRecurring }.sumOf { it.amountCents }
+        val monthDebitOneTime =
+          monthOccurrences
+            .filter { it.paymentMethod == ExpensePaymentMethod.DEBIT_ONE_TIME }
+            .sumOf { it.amountCents }
+        val monthCreditOneTime =
+          monthOccurrences
+            .filter { it.paymentMethod == ExpensePaymentMethod.CREDIT_ONE_TIME }
+            .sumOf { it.amountCents }
         val monthInstallment =
-          monthOccurrences.filter { it.isInstallment }.sumOf { it.amountCents }
+          monthOccurrences
+            .filter { it.paymentMethod == ExpensePaymentMethod.CREDIT_INSTALLMENT }
+            .sumOf { it.amountCents }
         val monthRecurring =
-          monthOccurrences.filter { it.isRecurring }.sumOf { it.amountCents }
+          monthOccurrences
+            .filter { it.paymentMethod == ExpensePaymentMethod.RECURRING }
+            .sumOf { it.amountCents }
 
         val selectedDayOccurrences =
           ExpenseCalculator.occurrencesInMonth(
@@ -376,7 +388,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
           paidKeys = paidKeys,
           expenseCountByDay = countMap,
           monthTotalCents = monthTotal,
-          monthOneTimeCents = monthOneTime,
+          monthDebitOneTimeCents = monthDebitOneTime,
+          monthCreditOneTimeCents = monthCreditOneTime,
           monthInstallmentCents = monthInstallment,
           monthRecurringCents = monthRecurring,
           dayTotalCents = dayTotal,

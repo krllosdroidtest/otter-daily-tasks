@@ -8,6 +8,7 @@ import com.example.backup.BackupManager
 import com.example.data.db.AppDatabase
 import com.example.data.model.AlarmSoundMode
 import com.example.data.model.ExpenseEntity
+import com.example.data.model.ExpensePaymentMethod
 import com.example.data.model.RecurrenceType
 import com.example.data.model.ShoppingItemEntity
 import com.example.data.model.TaskEntity
@@ -59,8 +60,9 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `app name matches otter`() {
+  fun `app name and topbar titles match otter format`() {
     assertEquals("otter", context.getString(R.string.app_name))
+    assertEquals("otter • Shopping List", context.getString(R.string.topbar_shopping))
   }
 
   @Test
@@ -316,7 +318,39 @@ class ExampleRobolectricTest {
       )
     )
 
-    val backupFile = File(context.cacheDir, "test_backup_v3.json")
+    expenseRepo.saveExpense(
+      ExpenseEntity(
+        title = "Supermercado",
+        totalAmountCents = 35_000L,
+        categoryId = catId,
+        isInstallment = false,
+        installmentCount = 1,
+        startYear = 2026,
+        startMonthZeroBased = 4,
+        dayOfMonth = 12,
+        dateMillis = DayKey(2026, 4, 12).toCalendarAt(12, 0).timeInMillis,
+        paymentMethod = ExpensePaymentMethod.DEBIT_ONE_TIME,
+      )
+    )
+
+    val creditOneTimeId =
+      expenseRepo.saveExpense(
+        ExpenseEntity(
+          title = "Farmácia",
+          totalAmountCents = 8_500L,
+          categoryId = catId,
+          isInstallment = false,
+          installmentCount = 1,
+          startYear = 2026,
+          startMonthZeroBased = 4,
+          dayOfMonth = 14,
+          dateMillis = DayKey(2026, 4, 14).toCalendarAt(12, 0).timeInMillis,
+          paymentMethod = ExpensePaymentMethod.CREDIT_ONE_TIME,
+        )
+      )
+    expenseRepo.setOccurrencePaid(creditOneTimeId, ExpenseCalculator.singleOccurrenceKey(), true)
+
+    val backupFile = File(context.cacheDir, "test_backup_v4.json")
     val uri = Uri.fromFile(backupFile)
     val prefs = ThemePreferences(ThemeMode.DARK, useDynamicColor = false, palette = AppPalette.EMERALD_SAGE)
 
@@ -338,8 +372,8 @@ class ExampleRobolectricTest {
     assertEquals(1, preview.taskCount)
     assertEquals(2, preview.shoppingItemCount)
     assertEquals(1, preview.folderCount)
-    assertEquals(2, preview.expenseCount)
-    assertEquals(1, preview.payload.expensePayments.size)
+    assertEquals(4, preview.expenseCount)
+    assertEquals(2, preview.payload.expensePayments.size)
     assertEquals(ThemeMode.DARK, preview.payload.preferences.themeMode)
     assertEquals(AppPalette.EMERALD_SAGE, preview.payload.preferences.palette)
 
@@ -365,12 +399,41 @@ class ExampleRobolectricTest {
     val restoredExps = expenseRepo.allExpenses.first()
     val restoredPayments = expenseRepo.allPayments.first()
     assertEquals(1, restoredCats.size)
-    assertEquals(2, restoredExps.size)
-    assertEquals(1, restoredPayments.size)
+    assertEquals(4, restoredExps.size)
+    assertEquals(2, restoredPayments.size)
+
+    val restoredDebit = restoredExps.first { it.title == "Supermercado" }
+    assertEquals(ExpensePaymentMethod.DEBIT_ONE_TIME, restoredDebit.effectivePaymentMethod())
+    val restoredCreditSingle = restoredExps.first { it.title == "Farmácia" }
+    assertEquals(ExpensePaymentMethod.CREDIT_ONE_TIME, restoredCreditSingle.effectivePaymentMethod())
     val restoredInst = restoredExps.first { it.isInstallment }
-    assertEquals(restoredInst.id, restoredPayments.first().expenseId)
-    assertEquals("inst_1", restoredPayments.first().occurrenceKey)
+    assertEquals(ExpensePaymentMethod.CREDIT_INSTALLMENT, restoredInst.effectivePaymentMethod())
     val restoredRec = restoredExps.first { it.isRecurring }
+    assertEquals(ExpensePaymentMethod.RECURRING, restoredRec.effectivePaymentMethod())
     assertEquals(RecurrenceType.MONTHLY, restoredRec.recurrence)
+
+    val mayOccurrences =
+      ExpenseCalculator.occurrencesInMonth(
+        restoredExps,
+        2026,
+        4,
+        restoredPayments.map { it.expenseId to it.occurrenceKey }.toSet(),
+      )
+    assertEquals(
+      35_000L,
+      mayOccurrences.filter { it.paymentMethod == ExpensePaymentMethod.DEBIT_ONE_TIME }.sumOf { it.amountCents },
+    )
+    assertEquals(
+      8_500L,
+      mayOccurrences.filter { it.paymentMethod == ExpensePaymentMethod.CREDIT_ONE_TIME }.sumOf { it.amountCents },
+    )
+    assertEquals(
+      40_000L,
+      mayOccurrences.filter { it.paymentMethod == ExpensePaymentMethod.CREDIT_INSTALLMENT }.sumOf { it.amountCents },
+    )
+    assertEquals(
+      12_000L,
+      mayOccurrences.filter { it.paymentMethod == ExpensePaymentMethod.RECURRING }.sumOf { it.amountCents },
+    )
   }
 }

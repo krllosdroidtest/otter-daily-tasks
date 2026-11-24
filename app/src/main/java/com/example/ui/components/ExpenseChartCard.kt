@@ -12,15 +12,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +55,7 @@ import kotlin.math.roundToInt
 private enum class ExpenseChartMode {
   BY_CATEGORY,
   DAILY,
+  BY_TYPE,
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -59,7 +64,8 @@ fun ExpenseChartCard(
   displayedYear: Int,
   displayedMonth: Int,
   monthTotalCents: Long,
-  monthOneTimeCents: Long,
+  monthDebitOneTimeCents: Long,
+  monthCreditOneTimeCents: Long,
   monthInstallmentCents: Long,
   monthRecurringCents: Long,
   categoryBreakdown: List<CategorySpendSlice>,
@@ -114,11 +120,22 @@ fun ExpenseChartCard(
         SummaryBadge(
           text =
             stringResource(
-              R.string.expense_chart_single_summary,
-              ExpenseCalculator.formatCurrency(monthOneTimeCents),
+              R.string.expense_chart_debit_summary,
+              ExpenseCalculator.formatCurrency(monthDebitOneTimeCents),
             ),
           containerColor = MaterialTheme.colorScheme.secondaryContainer,
           contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+          modifier = Modifier.testTag("expense_summary_debit"),
+        )
+        SummaryBadge(
+          text =
+            stringResource(
+              R.string.expense_chart_credit_single_summary,
+              ExpenseCalculator.formatCurrency(monthCreditOneTimeCents),
+            ),
+          containerColor = MaterialTheme.colorScheme.primaryContainer,
+          contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          modifier = Modifier.testTag("expense_summary_credit_single"),
         )
         SummaryBadge(
           text =
@@ -128,6 +145,7 @@ fun ExpenseChartCard(
             ),
           containerColor = MaterialTheme.colorScheme.tertiaryContainer,
           contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+          modifier = Modifier.testTag("expense_summary_credit_installment"),
         )
         SummaryBadge(
           text =
@@ -135,8 +153,9 @@ fun ExpenseChartCard(
               R.string.expense_chart_recurring_summary,
               ExpenseCalculator.formatCurrency(monthRecurringCents),
             ),
-          containerColor = MaterialTheme.colorScheme.primaryContainer,
-          contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+          contentColor = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.testTag("expense_summary_recurring"),
         )
       }
 
@@ -148,7 +167,10 @@ fun ExpenseChartCard(
           modifier = Modifier.padding(vertical = 8.dp),
         )
       } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
           FilterChip(
             selected = chartMode == ExpenseChartMode.BY_CATEGORY,
             onClick = { chartMode = ExpenseChartMode.BY_CATEGORY },
@@ -175,16 +197,37 @@ fun ExpenseChartCard(
             label = { Text(stringResource(R.string.expense_chart_by_day)) },
             modifier = Modifier.testTag("chart_mode_day"),
           )
+          FilterChip(
+            selected = chartMode == ExpenseChartMode.BY_TYPE,
+            onClick = { chartMode = ExpenseChartMode.BY_TYPE },
+            leadingIcon = {
+              Icon(
+                imageVector = Icons.Rounded.AccountBalanceWallet,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+              )
+            },
+            label = { Text(stringResource(R.string.expense_chart_by_type)) },
+            modifier = Modifier.testTag("chart_mode_type"),
+          )
         }
 
-        if (chartMode == ExpenseChartMode.BY_CATEGORY) {
-          CategoryDonutChart(slices = categoryBreakdown)
-        } else {
-          DailyBarChart(
-            displayedYear = displayedYear,
-            displayedMonth = displayedMonth,
-            dailyTotalsInMonth = dailyTotalsInMonth,
-          )
+        when (chartMode) {
+          ExpenseChartMode.BY_CATEGORY -> CategoryDonutChart(slices = categoryBreakdown)
+          ExpenseChartMode.DAILY ->
+            DailyBarChart(
+              displayedYear = displayedYear,
+              displayedMonth = displayedMonth,
+              dailyTotalsInMonth = dailyTotalsInMonth,
+            )
+          ExpenseChartMode.BY_TYPE ->
+            PaymentTypeBreakdownChart(
+              monthTotalCents = monthTotalCents,
+              debitOneTimeCents = monthDebitOneTimeCents,
+              creditOneTimeCents = monthCreditOneTimeCents,
+              creditInstallmentCents = monthInstallmentCents,
+              recurringCents = monthRecurringCents,
+            )
         }
       }
     }
@@ -192,14 +235,91 @@ fun ExpenseChartCard(
 }
 
 @Composable
-private fun SummaryBadge(text: String, containerColor: Color, contentColor: Color) {
-  Surface(shape = RoundedCornerShape(999.dp), color = containerColor) {
+private fun SummaryBadge(
+  text: String,
+  containerColor: Color,
+  contentColor: Color,
+  modifier: Modifier = Modifier,
+) {
+  Surface(shape = RoundedCornerShape(999.dp), color = containerColor, modifier = modifier) {
     Text(
       text = text,
       style = MaterialTheme.typography.labelMedium,
       color = contentColor,
       modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
     )
+  }
+}
+
+@Composable
+private fun PaymentTypeBreakdownChart(
+  monthTotalCents: Long,
+  debitOneTimeCents: Long,
+  creditOneTimeCents: Long,
+  creditInstallmentCents: Long,
+  recurringCents: Long,
+) {
+  val rows =
+    listOf(
+      Triple(
+        stringResource(R.string.expense_type_debit_one_time),
+        debitOneTimeCents,
+        MaterialTheme.colorScheme.secondary,
+      ),
+      Triple(
+        stringResource(R.string.expense_type_credit_one_time),
+        creditOneTimeCents,
+        MaterialTheme.colorScheme.primary,
+      ),
+      Triple(
+        stringResource(R.string.expense_type_credit_installment),
+        creditInstallmentCents,
+        MaterialTheme.colorScheme.tertiary,
+      ),
+      Triple(
+        stringResource(R.string.expense_type_recurring),
+        recurringCents,
+        MaterialTheme.colorScheme.outline,
+      ),
+    )
+
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    rows.forEach { (label, amountCents, barColor) ->
+      val fraction =
+        if (monthTotalCents > 0L) (amountCents.toFloat() / monthTotalCents.toFloat()).coerceIn(0f, 1f)
+        else 0f
+      val percent = (fraction * 100f).roundToInt().coerceIn(0, 100)
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+          Text(
+            text = "${ExpenseCalculator.formatCurrency(amountCents)} ($percent%)",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        LinearProgressIndicator(
+          progress = { fraction },
+          color = barColor,
+          trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+          modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(999.dp)),
+        )
+      }
+    }
   }
 }
 

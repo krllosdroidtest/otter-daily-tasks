@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.AlertDialog
@@ -70,6 +71,7 @@ import com.example.R
 import com.example.data.model.ExpenseCategoryEntity
 import com.example.data.model.ExpenseCategoryStyleCatalog
 import com.example.data.model.ExpenseEntity
+import com.example.data.model.ExpensePaymentMethod
 import com.example.ui.components.CalendarPanel
 import com.example.ui.components.CreateExpenseCategoryDialog
 import com.example.ui.components.ExpenseChartCard
@@ -129,7 +131,8 @@ fun ExpensesScreen(
           displayedYear = state.displayedYear,
           displayedMonth = state.displayedMonth,
           monthTotalCents = state.monthTotalCents,
-          monthOneTimeCents = state.monthOneTimeCents,
+          monthDebitOneTimeCents = state.monthDebitOneTimeCents,
+          monthCreditOneTimeCents = state.monthCreditOneTimeCents,
           monthInstallmentCents = state.monthInstallmentCents,
           monthRecurringCents = state.monthRecurringCents,
           categoryBreakdown = state.categoryBreakdown,
@@ -558,66 +561,119 @@ private fun ExpenseOccurrenceCard(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-          if (occurrence.isInstallment) {
-            Surface(
-              shape = RoundedCornerShape(10.dp),
-              color = MaterialTheme.colorScheme.tertiaryContainer,
-            ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+          when (occurrence.paymentMethod) {
+            ExpensePaymentMethod.CREDIT_INSTALLMENT -> {
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
               ) {
-                Icon(
-                  imageVector = Icons.Rounded.CreditCard,
-                  contentDescription = null,
-                  modifier = Modifier.size(14.dp),
-                  tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-                Text(
-                  text =
-                    stringResource(
-                      R.string.expense_installment_badge,
-                      occurrence.installmentNumber,
-                      occurrence.totalInstallments,
-                    ),
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onTertiaryContainer,
-                  fontWeight = FontWeight.SemiBold,
-                )
+                Row(
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.CreditCard,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                  )
+                  Text(
+                    text =
+                      stringResource(
+                        R.string.expense_installment_badge,
+                        occurrence.installmentNumber,
+                        occurrence.totalInstallments,
+                      ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                  )
+                }
               }
             }
-          } else if (occurrence.isRecurring) {
-            Surface(
-              shape = RoundedCornerShape(10.dp),
-              color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ExpensePaymentMethod.RECURRING -> {
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
               ) {
-                Icon(
-                  imageVector = Icons.Rounded.Repeat,
-                  contentDescription = null,
-                  modifier = Modifier.size(14.dp),
-                  tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Text(
-                  text =
-                    stringResource(
-                      R.string.expense_recurring_badge,
-                      stringResource(occurrence.recurrence.labelRes),
-                    ),
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onPrimaryContainer,
-                  fontWeight = FontWeight.SemiBold,
-                )
+                Row(
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.Repeat,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                  )
+                  Text(
+                    text =
+                      stringResource(
+                        R.string.expense_recurring_badge,
+                        stringResource(occurrence.recurrence.labelRes),
+                      ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                  )
+                }
+              }
+            }
+            ExpensePaymentMethod.CREDIT_ONE_TIME -> {
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.CreditCard,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                  )
+                  Text(
+                    text = stringResource(R.string.expense_type_credit_one_time),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                  )
+                }
+              }
+            }
+            ExpensePaymentMethod.DEBIT_ONE_TIME -> {
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.Payments,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                  )
+                  Text(
+                    text = stringResource(R.string.expense_type_debit_one_time),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                  )
+                }
               }
             }
           }
 
-          if (occurrence.isInstallment || occurrence.isRecurring) {
+          if (occurrence.paymentMethod != ExpensePaymentMethod.DEBIT_ONE_TIME) {
             FilterChip(
               selected = occurrence.isPaid,
               onClick = onTogglePaid,

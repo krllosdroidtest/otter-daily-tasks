@@ -1,6 +1,7 @@
 package com.example.util
 
 import com.example.data.model.ExpenseEntity
+import com.example.data.model.ExpensePaymentMethod
 import com.example.data.model.RecurrenceType
 import java.text.NumberFormat
 import java.util.Calendar
@@ -15,6 +16,7 @@ data class ExpenseOccurrence(
   val totalInstallments: Int,
   val isRecurring: Boolean = false,
   val recurrence: RecurrenceType = RecurrenceType.NONE,
+  val paymentMethod: ExpensePaymentMethod = expense.effectivePaymentMethod(),
   val occurrenceKey: String = if (totalInstallments > 1) "inst_$installmentNumber" else "single",
   val isPaid: Boolean = false,
 ) {
@@ -322,6 +324,7 @@ object ExpenseCalculator {
               totalInstallments = 1,
               isRecurring = false,
               recurrence = RecurrenceType.NONE,
+              paymentMethod = expense.effectivePaymentMethod(),
               occurrenceKey = key,
               isPaid = paidKeys.contains(expense.id to key),
             )
