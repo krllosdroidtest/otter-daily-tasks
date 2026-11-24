@@ -1,0 +1,6 @@
+{
+  "name": "otter",
+  "description": "Offline task manager with calendar, custom alarms, shopping list, and local backup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
